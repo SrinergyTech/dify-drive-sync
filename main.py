@@ -139,4 +139,52 @@ def drive_webhook():
 
     process_changes(page_token)
     return ("", 204)
+@app.get("/debug/info")
+def debug_info():
+    # Shows env + stored token so we know what the service is using
+    try:
+        from google.auth.transport import requests as gar
+        import google.auth
+        creds, project = google.auth.default()
+        sa_email = creds.service_account_email if hasattr(creds, "service_account_email") else "unknown"
+    except Exception as e:
+        sa_email = f"error: {e}"
+
+    state = get_state()
+    return {
+        "project": os.environ.get("GOOGLE_CLOUD_PROJECT"),
+        "service_account": sa_email,
+        "webhook_url": os.environ.get("WEBHOOK_URL"),
+        "channel_token_set": bool(os.environ.get("CHANNEL_TOKEN")),
+        "stored_page_token": state.get("pageToken"),
+    }
+
+@app.post("/debug/pull")
+def debug_pull():
+    # Manually pull & process changes using the stored pageToken (no webhook needed)
+    state = get_state()
+    pt = state.get("pageToken")
+    if not pt:
+        return {"ok": False, "error": "no pageToken; hit /init first"}, 400
+    try:
+        process_changes(pt)
+        return {"ok": True}
+    except Exception as e:
+        logging.exception("manual pull failed")
+        return {"ok": False, "error": str(e)}, 500
+
+# add verbose logging in the webhook to see traffic
+@app.post("/drive-webhook")
+def drive_webhook():
+    logging.info("drive-webhook called")
+    if request.headers.get("X-Goog-Channel-Token") != CHANNEL_TOKEN:
+        logging.warning("channel token mismatch")
+        abort(403)
+    state = get_state()
+    page_token = state.get("pageToken")
+    if not page_token:
+        abort(500, "Missing pageToken; open /init once.")
+    process_changes(page_token)
+    return ("", 204)
+
 
