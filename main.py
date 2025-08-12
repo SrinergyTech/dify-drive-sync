@@ -118,7 +118,12 @@ def init_watch():
         "address": WEBHOOK_URL + "/drive-webhook",
         "token": CHANNEL_TOKEN,  # echoed back in header on notifications
     }
-    drive.changes().watch(body=body).execute()
+    drive.changes().watch(
+    pageToken=token,
+    supportsAllDrives=True,
+    includeItemsFromAllDrives=True,
+    body=body
+     ).execute()
     return {"ok": True, "channel_id": channel_id, "startPageToken": token}
 
 @app.post("/drive-webhook")
@@ -134,3 +139,4 @@ def drive_webhook():
 
     process_changes(page_token)
     return ("", 204)
+
